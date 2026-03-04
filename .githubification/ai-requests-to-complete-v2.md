@@ -32,7 +32,7 @@ Each request below is a self-contained prompt for an AI coding agent (e.g., Clau
 > - `name`: `"nanoclaw-githubification"`
 > - `private`: `true`
 > - `type`: `"module"`
-> - `dependencies`: `{ "@anthropic-ai/claude-code": "latest" }` (the Claude Agent SDK / `pi` coding agent runtime)
+> - `dependencies`: `{ "@anthropic-ai/claude-code": "latest", "cron-parser": "^4.9.0" }` (the Claude Agent SDK runtime and cron expression parser for scheduled tasks)
 >
 > Add `.gitkeep` files to empty directories (`state/issues/`, `state/sessions/`, `state/task-logs/`, `state/groups/global/`) so they are tracked by Git. Do NOT add `.gitkeep` to directories that already contain files.
 
@@ -200,7 +200,7 @@ Each request below is a self-contained prompt for an AI coding agent (e.g., Clau
 >         run: bun .githubification/lifecycle/indicator.ts
 >
 >       - name: Install dependencies
->         run: cd .githubification && bun install --frozen-lockfile
+>         run: cd .githubification && bun install
 >
 >       - name: Run agent
 >         env:
@@ -380,7 +380,7 @@ Each request below is a self-contained prompt for an AI coding agent (e.g., Clau
 >    - Post the agent's response as a comment on that issue with a prefix: `🔔 **Scheduled Task:** {task.prompt}\n\n---\n\n{agent_response}`.
 >
 > 4. **Update `next_run`:**
->    - For `cron` type: calculate the next occurrence after now using the cron expression (use a cron parser — add `cron-parser` to `.githubification/package.json` dependencies).
+>    - For `cron` type: calculate the next occurrence after now using the cron expression (use `cron-parser` from the `.githubification/package.json` dependencies).
 >    - For `interval` type: set `next_run` to `new Date(Date.now() + parseInt(schedule_value)).toISOString()`.
 >    - For `once` type: set `status` to `"completed"` and `next_run` to `null`.
 >
@@ -445,7 +445,7 @@ Each request below is a self-contained prompt for an AI coding agent (e.g., Clau
 >
 >   async sendMessage(jid: string, text: string): Promise<void> {
 >     // Parse issue number from JID format "gh:<number>"
->     const issueNumber = jid.replace('gh:', '');
+>     const issueNumber = jid.replace(/^gh:/, '');
 >     const [owner, repo] = (process.env.GITHUB_REPOSITORY || '').split('/');
 >     const token = process.env.GITHUB_TOKEN;
 >     if (!owner || !repo || !token) {
@@ -481,7 +481,7 @@ Each request below is a self-contained prompt for an AI coding agent (e.g., Clau
 >     // When isTyping=true, add 🚀 reaction; when false, no action needed
 >     // (reaction removal is not necessary — it persists as a "processing started" indicator)
 >     if (!isTyping) return;
->     const issueNumber = jid.replace('gh:', '');
+>     const issueNumber = jid.replace(/^gh:/, '');
 >     const [owner, repo] = (process.env.GITHUB_REPOSITORY || '').split('/');
 >     const token = process.env.GITHUB_TOKEN;
 >     if (!owner || !repo || !token) return;
