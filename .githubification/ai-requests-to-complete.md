@@ -149,11 +149,13 @@ Implementation:
 
 4. **Build the message prompt**: For `issues.opened`, combine issue title and body. For `issue_comment.created`, use the comment body. For `issues.reopened`, include a system note that the issue was reopened plus the original issue body. For `issue_comment.edited`, use the new comment body.
 
-5. **Prepare container input**: Construct the `ContainerInput` object compatible with `runContainerAgent` from `src/container-runner.ts`. Set paths using the GitHub-mode overrides (`NANOCLAW_STORE_DIR`, `NANOCLAW_GROUPS_DIR`, `NANOCLAW_DATA_DIR` pointing into `.github-nanoclaw/state/`). Include the formatted message as the prompt. Reuse NanoClaw's existing credential filtering model: pass only required auth environment variables to the container via stdin (never via mounted files), and never write secrets into committed state files.
+5. **Prepare container input**: Construct the `ContainerInput` object compatible with `runContainerAgent` from `src/container-runner.ts`. Set paths using the GitHub-mode overrides (`NANOCLAW_STORE_DIR`, `NANOCLAW_GROUPS_DIR`, `NANOCLAW_DATA_DIR` pointing into `.github-nanoclaw/state/`). Include the formatted message as the prompt. Reuse NanoClaw's existing credential filtering model: pass only the required auth environment variables (`ANTHROPIC_API_KEY` for Claude API access, `GITHUB_TOKEN` for API calls) to the container via stdin JSON (never via mounted files or committed state).
 
 6. **Execute the agent**: Import and call `runContainerAgent`. Capture the output.
 
-7. **Format the response**: Import `formatOutbound` from `src/router.ts` to strip `<internal>...</internal>` tags from the agent output. Return the cleaned response text.
+7. **Format the response**: Import `formatOutbound` from `src/router.ts` to strip `<internal>...</internal>` tags from the agent output. Write the cleaned response to `.github-nanoclaw/state/readable/last-response.md` (so the workflow can post it as an issue comment). Return the cleaned response text.
+
+The module must work both as an importable library (exporting `runGitHubAgent` for testing) and as a runnable CLI script. When executed directly (`npx tsx .github-nanoclaw/lifecycle/github-agent.ts`), read parameters from environment variables (`GITHUB_EVENT_PATH`, `GITHUB_TOKEN`, `GITHUB_REPOSITORY` for `owner/repo`) and call `runGitHubAgent`. Exit with code 0 on success, 1 on failure.
 
 8. If any step fails, return `{ success: false, error: <message>, issueNumber }` with an actionable error description.
 
@@ -169,7 +171,7 @@ Implementation:
 
 1. Use the GitHub REST API (`POST /repos/{owner}/{repo}/issues/{issue_number}/comments`) to create a new comment.
 2. Set the `Authorization: Bearer <token>` header and `Accept: application/vnd.github+json`.
-3. If the response body exceeds 65536 characters (GitHub comment limit), truncate with a note: `\n\n---\n*Response truncated due to length.*`
+3. If the response body exceeds 65536 bytes (GitHub comment limit — check with `Buffer.byteLength(body, 'utf8')` to account for multi-byte UTF-8 characters), truncate with a note: `\n\n---\n*Response truncated due to length.*`
 4. Return the created comment ID on success.
 5. On failure, return `{ success: false, error: <message> }`.
 6. Accept GitHub API base URL via optional parameter for testing.
@@ -458,9 +460,9 @@ Test cases:
 
 7. **Bot actor is detected**: `isBotOrSelf('github-actions[bot]')` returns `true`. `isBotOrSelf('dependabot[bot]')` returns `true`. `isBotOrSelf('realuser')` returns `false`.
 
-8. **Sentinel file missing blocks execution**: When `.github-nanoclaw/github-nanoclaw-ENABLED.md` does not exist, agent execution must not proceed.
+8. **Sentinel file missing blocks execution**: When `.github-nanoclaw/github-nanoclaw-ENABLED.md` does not exist, agent execution must not proceed. Verify that no agent invocation occurs, the function returns an error result with reason `'Agent disabled'`, and the appropriate failure response is generated.
 
-9. **Sentinel file present allows execution**: When the sentinel file exists, execution proceeds to authorization check.
+9. **Sentinel file present allows execution**: When the sentinel file exists, execution proceeds past the guard to the authorization check. Verify the guard does not block when the file is present.
 
 ---
 
